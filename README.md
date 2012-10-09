@@ -4,6 +4,12 @@ fsPhoneLite
 fsPhone is an flex softPhone designed for freeSWITCH, working with mod_rtmp by rtmp connection.
 fsPhoneLite support basic call functionality. In addition, it implemented an simple esl to interact with freeSWITCH's mod_event_sokect.
 
+Licensing
+=========
+
+fsPhoneLite is distributed under the Mozilla Public License version 2.If a copy of the MPL was not distributed with this
+project, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 ##Development Environment:<br>
 **flex sdk 4.5**<br>
 **flash player 10.3**
