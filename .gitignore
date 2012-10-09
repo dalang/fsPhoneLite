@@ -6,4 +6,8 @@ bin-release/
 .actionScriptProperties
 .flexProperties
 .settings/
+<<<<<<< HEAD
 .project
+=======
+.project
+>>>>>>> 74bf7e6c8f4be2761d61a4a8893f28336672cebf
