@@ -631,10 +631,10 @@
 				statusTxt.text = ResourceUtil.getInstance().getString('phoneCanvas.sTxtHangup');
 
 				curCall = '';
-				if (parentApplication.evtpttbuf != null)
-				{
-					parentApplication.evtpttbuf = null;
-				}
+//				if (parentApplication.evtpttbuf != null)
+//				{
+//					parentApplication.evtpttbuf = null;
+//				}
 //				isPTTOriginator = false;
 
 				stopTimer();
