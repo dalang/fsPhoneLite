@@ -17,6 +17,7 @@ fsPhoneLite support basic call functionality. In addition, it implemented an sim
 <pre>
     resources/locale/{locale}<br>
 </pre>
+
 ##Others:<br>
 * fsPhoneLite.html is an example to load fsPhoneLite in html page<br>
 * Since the security policy of flash, exception will be threw out when connecting to mod_event_socket of freeSWITCH directly. Running the ruby script "crossdomain.rb" (thanks to Seven Du) on the freeSWITCH server will be an solution.<br>
@@ -27,6 +28,7 @@ fsPhoneLite support basic call functionality. In addition, it implemented an sim
 * edit **fs' dialplan** to enable incommingCall of fsPhoneLite:<br>
 <pre>&lt;action application="bridge" data="${rtmp_contact($${rtmp_profile}/${dialed_ext}@$${domain})}"/&gt;
 </pre>
+
 ##Acknowledge:<br>
 flex ESL based on fsair's written by Seven Du<br>
 fsPhone's UI is based on an open source project named red5phone
