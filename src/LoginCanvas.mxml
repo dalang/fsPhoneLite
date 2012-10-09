@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Canvas xmlns:mx="http://www.adobe.com/2006/mxml" width="268" height="380" backgroundColor="#3E413E" borderStyle="solid" 
+	xmlns:thirdParty="components.*"
+    cornerRadius="0" backgroundAlpha="0.0" creationComplete="init()">
+    
+	<mx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.utils.UIDUtil;
+			import VersionControl.VersionController;
+			
+			private const BAR_STEP_SIZE:uint = 33;
+			private var percent:uint;
+			
+			[Bindable]
+			private var languages:ArrayCollection = new ArrayCollection(new Array({display: "简体中文", value: "zh_CN"}, {display: "English", value: "en_US"}));
+
+
+			private var myuid:String;
+			private var so:SharedObject;
+
+			public function setParameters(logConfig:Object):void
+			{
+				if (null != logConfig)
+				{
+					var autologin:Boolean = logConfig.autologin;
+					var username:String = logConfig.username;
+					var password:String = logConfig.password;
+					var realm:String = logConfig.realm;
+					var server:String = logConfig.server;
+				}
+				
+				if (realm == null || realm == "")
+				{
+					if (so.data.realm)
+						realmTxt.text = so.data.realm;
+					else
+						realmTxt.text = "127.0.0.1";
+				}
+				else
+					realmTxt.text = realm;
+
+
+				if (server == null || server == "")
+				{
+					if (so.data.server)
+						serverTxt.text = so.data.server;
+					else
+						serverTxt.text = "127.0.0.1";
+				}
+				else
+					serverTxt.text = server;
+
+
+				if (username == null || username == "")
+				{
+					if (so.data.username)
+						usernameTxt.text = so.data.username;
+					else
+						usernameTxt.text = "1000";
+				}
+				else
+					usernameTxt.text = username;
+
+
+				if (password == null || password == "")
+				{
+					if (so.data.password)
+						passwordTxt.text = so.data.password;
+					else
+						passwordTxt.text = "1234";
+				}
+				else
+					passwordTxt.text = password;
+
+				if (autologin && serverTxt.text != "" && usernameTxt.text != "" && passwordTxt.text != "")
+					this.login();
+			}
+
+			protected function langCmb_changeHandler(event:Event):void
+			{
+				ResourceUtil.getInstance().changeLanguage(langCmb.selectedItem.value as String);
+				try
+				{
+					var saveObject:SharedObject = SharedObject.getLocal("language", "/");
+					saveObject.data.languageName = langCmb.selectedItem.value as String;
+					saveObject.flush();
+					VersionController.update();
+				}
+				catch (e:Error)
+				{
+					trace(e.name);
+				}
+			}
+
+			private function init():void
+			{
+				myuid = UIDUtil.createUID();
+				so = SharedObject.getLocal("fsPhoneLite");
+				this.horizontalScrollPolicy = "off";
+				this.verticalScrollPolicy = "off";
+			}
+
+			private function login():void
+			{
+				this.parentApplication.login(usernameTxt.text, passwordTxt.text, realmTxt.text, serverTxt.text, portTxt.text, socketpswTxt.text);
+				so.data.username = usernameTxt.text;
+				so.data.password = passwordTxt.text;
+				so.data.realm = realmTxt.text;
+				so.data.server = serverTxt.text;
+				so.flush();
+
+				bar.setProgress(0, 100);
+				percent = 1;
+				barMLabel.text = ResourceUtil.getInstance().getString('loginCanvas.currentprogress') + ' 0%';
+				barMLabel.visible = true;
+				bar.visible = true;
+				alertMsgTxt.text = '';
+			}
+
+			public function setProgressbar(msg:String = "", canRun:Boolean = true):void
+			{
+				setTimeout(_runit(canRun, msg), 25);
+			}
+
+			private function _runit(canRun:Boolean, msg:String):Function
+			{
+				return function():void
+				{
+					runit(canRun, msg);
+				}
+			}
+			
+			private function runit(canRun:Boolean, str:String):void
+			{
+				if (percent <= 100)
+				{
+					if (canRun == true)
+						percent += BAR_STEP_SIZE;
+					bar.setProgress(percent, 100);
+					barMLabel.text = ResourceUtil.getInstance().getString('loginCanvas.currentprogress') + " " + percent + "%";
+					if (str != "")
+						barMLabel.text += " " + str;
+					if (percent >= 100 || str == ResourceUtil.getInstance().getString('loginCanvas.RegOK'))
+					{
+						barMLabel.text = '';
+						barMLabel.visible = false;
+						setTimeout(function():void
+						{
+							dispatchEvent(new Event(Event.CHANGE, true));
+						}, 100);
+					}
+				}
+			}
+		]]>
+	</mx:Script>
+    <mx:Metadata>
+		[Event("change", type="mx.events.Event")]
+	</mx:Metadata>	    	
+	<mx:Button x="194" y="308" label="{ResourceUtil.getInstance().getString('loginCanvas.login')}" click="login()" fillAlphas="[1.0, 1.0]" fillColors="[#FF0000, #DD0000]" color="#FFFFFF" themeColor="#DD0000" fontSize="13" width="68"/>
+	<mx:Text x="2" y="309"  color="#FD0202" fontSize="13" id="alertMsgTxt" width="193" fontWeight="bold"/>
+
+        
+	<mx:Accordion x="0" y="95" height="209" width="100%" creationPolicy="all" borderThickness="0">
+		<mx:Canvas label="" width="100%" height="100%">
+			<mx:Text x="18.5" y="10" text="{ResourceUtil.getInstance().getString('loginCanvas.language')}" width="85" height="20" fontSize="13" color="#E98F02" fontWeight="bold"/>
+			<mx:Text x="18.5" y="38" text="{ResourceUtil.getInstance().getString('loginCanvas.username')}" width="85" height="20" fontSize="13" color="#E98F02" fontWeight="bold"/>
+			<mx:TextInput x="137.5" y="39" width="100" id="usernameTxt" text="1001"/>
+			<mx:Text x="18.5" y="63" text="{ResourceUtil.getInstance().getString('loginCanvas.password')}" width="85" height="20" fontSize="13" color="#E98F02" fontWeight="bold"/>
+			<mx:TextInput x="137.5" y="64" width="100" displayAsPassword="true" id="passwordTxt" text="1234"/>
+			<mx:Text x="18.5" y="105" text="{ResourceUtil.getInstance().getString('loginCanvas.siprealm')}" width="85" height="20" fontSize="13" color="#E98F02" fontWeight="bold" visible="true"/>
+			<mx:TextInput x="137.5" y="106" width="100" id="realmTxt" visible="true" text="" />
+			<mx:Text x="18.5" y="130" text="{ResourceUtil.getInstance().getString('loginCanvas.sipserver')}" width="85" height="20" fontSize="13" color="#E98F02" fontWeight="bold" visible="true"/>
+			<mx:TextInput x="137.5" y="131" width="100" id="serverTxt" visible="true" text="" />
+			<mx:ComboBox id="langCmb" textAlign="left" width="100" dataProvider="{languages}" labelField="display" change="langCmb_changeHandler(event)" x="137.5" y="9" selectedIndex="0"/>
+		</mx:Canvas>
+		
+		<mx:Canvas width="100%" height="100%" color="#0B333C">
+			<mx:Text x="10" y="57" text="{ResourceUtil.getInstance().getString('loginCanvas.socketport')}" width="93" height="20" fontSize="13" color="#E98F02" fontWeight="bold" visible="true"/>
+			<mx:TextInput x="129" y="58" width="100" id="portTxt" visible="true" text="8021" restrict='0-9'  maxChars="4"/>
+			<mx:Text x="10" y="29" text="{ResourceUtil.getInstance().getString('loginCanvas.socketpassword')}" width="116" height="23" fontSize="13" color="#E98F02" fontWeight="bold" visible="true"/>
+			<mx:TextInput x="129" y="30" width="100" id="socketpswTxt" visible="true"  text="ClueCon"  displayAsPassword="true"/>
+			<mx:HRule x="10" y="23" width="219" height="5"/>
+			<mx:Label x="10" y="0" text="{ResourceUtil.getInstance().getString('loginCanvas.socketsetting')}" width="116" height="23" fontSize="13" fontWeight="bold"/>
+		</mx:Canvas>
+	</mx:Accordion>
+
+	<mx:ProgressBar id="bar" labelPlacement="bottom" themeColor="#0A459E"
+            minimum="0"  maximum="100" labelWidth="0"
+            direction="right" mode="manual" width="266" y="338" x="0" verticalGap="0" trackHeight="10" height="12" visible="false"/>
+            
+    <thirdParty:MultilineLabel id='barMLabel' width="266" y="349" x="0" fontSize="11" color="#1079E5" fontWeight="bold"  height="26" visible="false"/>
+    <mx:Image x="-1.5" y="0" width="269" height="97" source="assets/fsPhoneLite.jpg" autoLoad="true" scaleContent="true" maintainAspectRatio="false"/>
+
+</mx:Canvas>
+

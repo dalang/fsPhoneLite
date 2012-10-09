@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:TitleWindow xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" width="170" height="184" borderStyle="solid" 
+	creationComplete="init()" 
+	title="{ResourceUtil.getInstance().getString('transferBox.title')}" showCloseButton="true" close="close()" backgroundColor="#4C4C4C" color="#E8E8E8" verticalAlign="middle" fontSize="10" cornerRadius="16" horizontalScrollPolicy="off">
+	<mx:Script>
+		<![CDATA[
+			import mx.managers.PopUpManager;
+			
+			private function init():void {
+				transNumTxt.setFocus();
+			}
+			
+			private function close():void {
+				PopUpManager.removePopUp(this);
+			}
+			
+			private function doTrans():void {
+				if(transNumTxt.text != null)
+				{
+					parentApplication.phoneCanvas.doTransfer(transNumTxt.text);
+					PopUpManager.removePopUp(this);
+				}
+			}
+			
+		]]>
+	</mx:Script>
+	<mx:Accordion x="0" y="10" width="150" height="124" color="#141414" fontWeight="bold">
+		<mx:Canvas label="{ResourceUtil.getInstance().getString('transferBox.destination')}" width="100%" height="100%"  color="#2C2B2B" borderColor="#010101" fontWeight="normal">
+			<mx:TextInput x="16.5" y="28" width="115" id="transNumTxt"/>			
+			<mx:Button x="52.5" y="68" label="{ResourceUtil.getInstance().getString('transferBox.ok')}" click="doTrans()"/>
+		</mx:Canvas> 
+	</mx:Accordion>
+	
+</mx:TitleWindow>

@@ -1,0 +1,664 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml"
+				layout="absolute"
+				width="270"
+				height="380"
+				preinitialize="preSetup()"
+				creationComplete="init()"
+				applicationComplete="appInit()"
+				xmlns:local="*"
+				alpha="1.0"
+				backgroundGradientAlphas="[1.0, 1.0]"
+				backgroundGradientColors="[#A1A0A0, #020202]"
+				borderStyle="solid"
+				cornerRadius="10">
+
+	<mx:Metadata>
+		[ResourceBundle("fsPhoneLite")]
+	</mx:Metadata>
+	<mx:Script>
+		<![CDATA[
+			import com.FreeSWITCH.XML.CUSTOM.Conference_event;
+			import com.FreeSWITCH.rtmp.RTMP;
+
+			import flash.external.*;
+			import com.FreeSWITCH.socket.SocketManager;
+			import com.FreeSWITCH.XML.ESL_event;
+			import mx.utils.StringUtil;
+			import VersionControl.VersionController;
+			import events.*;
+
+			import com.adobe.ac.mxeffects.Flip;
+			import com.adobe.ac.mxeffects.DistortionConstants;
+			private var configXML:XML;
+			private var myuid:String;
+
+			private var username:String;
+			private var password:String;
+			private var sipRealm:String;
+			private var sipServer:String;
+
+			public var rtmp:RTMP = null;
+			public var socketManager:SocketManager = null;
+			public var configUseEncryptedPwd:Boolean = false;
+
+			private static var externalConfig:Object;
+			private static var internalConfig:Object;
+			private var intervalID:uint;
+
+
+			public function preSetup():void
+			{
+				externalConfig = { autologin:false, username:"", password:"1234", realm:"", server:"" };
+				internalConfig = { socketPort:"8021", socketPsw:"ClueCon" };
+				var tempConfig:Object = ExternalInterface.call("fsPhone_getConfig");
+
+				for (var extKey:String in tempConfig)
+				{
+					externalConfig[extKey.toLowerCase()] = tempConfig[extKey];
+				}
+			}
+
+			private function init():void
+			{
+				VersionController.getInstance(this);
+
+				ExternalInterface.addCallback("login", function(username:String, password:String, realm:String, server:String):void
+				{
+					login(username, password, realm, server);
+				});
+
+				if (checkUrlParams())
+				{
+					var obj:Object = this.parameters;
+
+					if (obj.sipnum == null || obj.confnum == null)
+						obj = this.loaderInfo.parameters;
+					if (obj.sipnum != null && obj.confnum != null)
+						intervalID = setInterval(this.tryAutoLogin, 1000, obj.sipnum, obj.confnum);
+				}
+			}
+
+			private function checkUrlParams():Boolean
+			{
+				var obj:Object = this.parameters;
+				if (obj.sipnum == null || obj.confnum == null)
+				{
+					if (this.loaderInfo != null)
+						obj = this.loaderInfo.parameters;
+					else
+						obj = null;
+				}
+
+				if (obj == null)
+					return false;
+				else
+				{
+					for (var name:String in obj)
+					{
+						trace(name + ": " + obj[name]);
+					}
+					return true;
+				}
+			}
+
+			private function tryAutoLogin(sipNum:String, confNum:String):void
+			{
+				sipServer = ExternalInterface.call("getServerIp");
+				sipRealm = ExternalInterface.call("getRealm");
+				trace("server ip:" + sipServer, " realm ip:" + sipRealm);
+				
+				if (null != sipRealm && null != sipServer)
+				{
+					externalConfig.autologin = true;
+					externalConfig.username = sipNum;
+					externalConfig.realm = sipRealm;
+					externalConfig.server = sipServer;
+					loginCanvas.setParameters(externalConfig);
+					if (0 != intervalID)
+						clearInterval(intervalID);
+					intervalID = setInterval(this.tryCallConference, 1000, confNum);
+				}
+			}
+
+			private function tryCallConference(confnum:String):void
+			{
+				if (phoneCanvas.visible == true)
+				{
+					phoneCanvas.dialnumTxt.text = confnum;
+					phoneCanvas.dialButton.dispatchEvent(new MouseEvent(MouseEvent.CLICK));
+					clearInterval(intervalID);
+				}
+			}
+
+			private function appInit():void
+			{
+				// NOTICE: The loaderInfo Object is NOT available until the FlexEvent.APPLICATION_COMPLETE event is fired. 
+				var loader:URLLoader = new URLLoader();
+				var request:URLRequest = new URLRequest((getLocalBaseDir() ? getLocalBaseDir() : "") + "config.xml?");
+				loader.addEventListener(IOErrorEvent.IO_ERROR, handleIOError);
+				loader.load(request);
+				loader.addEventListener(Event.COMPLETE, onComplete);
+			}
+
+			public function getLocalBaseDir():String
+			{
+				if (null == this.loaderInfo)
+				{
+					return null;
+				}
+				var url:String = this.loaderInfo.url;
+				var r:String = "";
+				var n:int = url.lastIndexOf("/");
+				r = url.substr(0, n + 1);
+				return r;
+			}
+
+			private function handleIOError(event:IOErrorEvent):void
+			{
+				trace("Load failed: IO error: " + event.text);
+			}
+
+			private function onComplete(event:Event):void
+			{
+				configXML = new XML(event.target.data);
+				sipRealm = configXML.sipRealm[0];
+				sipServer = configXML.sipServer[0];
+
+				configUseEncryptedPwd = (parseInt(configXML.useEncryptedPwd[0]) == 1);
+				username = externalConfig.username;
+				password = externalConfig.password;
+
+				loginCanvas.setParameters(externalConfig);
+			}
+
+			public function login(username:String, password:String, realm:String, server:String, socketPort:String = null, socketPsw:String = null):void
+			{
+				this.username = username;
+				this.password = password;
+				this.sipRealm = realm;
+				this.sipServer = server;
+
+				// update internalConfig
+				if (socketPort)
+					internalConfig.socketPort = socketPort;
+				if (socketPsw)
+					internalConfig.socketPsw = socketPsw;
+
+				rtmp = new RTMP(username, password, realm, server);
+				rtmp.addEventListener(LogMessageEvent.LOG, receivedLogMessageEvent);
+				socketManager = new SocketManager(this.sipServer, internalConfig.socketPort, internalConfig.socketPsw, this.sipRealm);
+				socketManager.addEventListener(SocketMessageEvent.MESSAGE, receivedSocketMessageEvent);
+				socketManager.addEventListener(LogMessageEvent.LOG, receivedLogMessageEvent);
+
+				// Step 1 setup socket connection
+				socketManager.eslConnect();
+
+				// Step 2 setup rtmp connection
+				rtmp.connect();
+				rtmp.addEventListener(RtmpMessageEvent.MESSAGE, receivedRtmpMessageEvent);
+				rtmp.addEventListener(IncomingCallEvent.INCOMING, incomingCallEvent);
+				rtmp.addEventListener(CallConnectedEvent.CONNECTED, callConnectedEvent);
+				rtmp.addEventListener(CallDisconnectedEvent.DISCONNECTED, callDisconnectedEvent);
+				rtmp.addEventListener(MissedCallEvent.CALLMISSED, missedCallEvent);
+
+			}
+
+			private function receivedSocketMessageEvent(event:SocketMessageEvent):void
+			{
+				var msgType:String = event.msgType;
+				var message:String = event.message;
+				var eslev:ESL_event = event.eslev;
+				var data:String = event.data;
+
+				switch (msgType)
+				{
+
+					case SocketMessageEvent.ESLSTAUS:
+						if (message == 'Connected')
+						{
+							if (loginCanvas.visible)
+								loginCanvas.setProgressbar("event socket " + ResourceUtil.getInstance().getString('loginCanvas.SocketOK'));
+						}
+						else
+						{
+							var errcause:String;
+							if (message == 'Disconnected')
+							{
+								errcause = ResourceUtil.getInstance().getString('loginCanvas.Disconnected');
+							}
+							else if (message == 'Error')
+							{
+								errcause = ResourceUtil.getInstance().getString('loginCanvas.Error');
+							}
+							else if (message == 'IOError')
+							{
+								errcause = ResourceUtil.getInstance().getString('loginCanvas.IOError');
+							}
+							else if (message == 'SecurityError')
+							{
+								errcause = ResourceUtil.getInstance().getString('loginCanvas.SecurityError');
+							}
+
+							if (loginCanvas.visible)
+							{
+								loginCanvas.setProgressbar("event socket " + errcause, false);
+							}
+						}
+						break;
+
+					case SocketMessageEvent.ESLCMD:
+						if (message == 'rtmp_contact')
+						{
+							if (socketManager.esl.connected)
+								socketManager.getRtmpDialstr(this.username, this.sipRealm);
+						}
+						else if (message == 'conference specific list')
+						{
+							var objconfinfo:Object = parserConferencelist(StringUtil.trim(data));
+							phoneCanvas.setConferencesInfo(objconfinfo);
+						}
+
+						break;
+
+					case SocketMessageEvent.ESLCONFERENCEEVENT:
+						var evtconf:Conference_event;
+						if (phoneCanvas.isConferenceCall())
+						{
+							var strmember:String;
+							evtconf = new Conference_event(eslev);
+							if (phoneCanvas.curCall == evtconf.ConfName.substr(0, phoneCanvas.curCall.length))
+							{
+								switch (evtconf.ConfAct)
+								{
+									case "add-member":
+										strmember = evtconf.CallerUsername;
+										phoneCanvas.addConfMember(evtconf.ConfSize, evtconf.MemID, strmember, evtconf.ConfStat);
+										break;
+									case "del-member":
+										strmember = evtconf.CallerUsername;
+										phoneCanvas.delConfMember(evtconf.ConfSize, evtconf.MemID, strmember);
+										break;
+									case "mute-member":
+										phoneCanvas.muteConfMember(evtconf.MemID);
+										break;
+									case "unmute-member":
+										phoneCanvas.muteConfMember(evtconf.MemID, false);
+										break;
+									case "deaf-member":
+										phoneCanvas.deafConfMember(evtconf.MemID);
+										break;
+									case "undeaf-member":
+										phoneCanvas.deafConfMember(evtconf.MemID, false);
+										break;
+									case "floor-change":
+										phoneCanvas.changeConfFloor(evtconf.ConfSize, evtconf.NewID, evtconf.OldID);
+										break;
+									default:
+										break;
+								}
+							}
+						}
+						break;
+					default:
+						break;
+				}
+			}
+
+			private function receivedLogMessageEvent(event:LogMessageEvent):void
+			{
+				var msgType:String = event.msgType;
+				var message:String = event.message;
+
+				switch (msgType)
+				{
+					case LogMessageEvent.RTMPLOG:
+						phoneCanvas.rtmpLogBox.text += message + "\n";
+						phoneCanvas.rtmpLogBox.verticalScrollPosition = phoneCanvas.rtmpLogBox.maxVerticalScrollPosition;
+						break;
+
+					case LogMessageEvent.ESLLOG:
+						phoneCanvas.eslLogBox.text += message + "\n";
+						phoneCanvas.eslLogBox.verticalScrollPosition = phoneCanvas.eslLogBox.maxVerticalScrollPosition;
+						break;
+
+					default:
+				}
+			}
+
+			private function receivedRtmpMessageEvent(event:RtmpMessageEvent):void
+			{
+				var msgType:String = event.msgType;
+				var message:String = event.message;
+
+				switch (msgType)
+				{
+					case RtmpMessageEvent.NETSTAUS:
+
+						if (message == 'Failed to connect to FreeSWITCH')
+						{
+							phoneCanvas.statusTxt.text = ResourceUtil.getInstance().getString('phoneCanvas.sTxtFailed');
+							loginCanvas.visible = true;
+							phoneCanvas.visible = false;
+							loginCanvas.setProgressbar(ResourceUtil.getInstance().getString('phoneCanvas.sTxtFailed'), false);
+						}
+						else if (message == 'Connection success')
+						{
+							phoneCanvas.statusTxt.text = ResourceUtil.getInstance().getString('phoneCanvas.sTxtConnected');
+							loginCanvas.setProgressbar(ResourceUtil.getInstance().getString('phoneCanvas.sTxtConnected'));
+							// Step 3 register to freeswitch after connect to mod_rtmp
+							rtmp.login();
+						}
+						else
+						{
+							loginCanvas.alertMsgTxt.text = message;
+							phoneCanvas.statusTxt.text = message;
+						}
+
+						break;
+
+					case RtmpMessageEvent.SIP_Login:
+						if (message == 'SUCCESS')
+						{
+							loginCanvas.alertMsgTxt.text = ResourceUtil.getInstance().getString('loginCanvas.alertMsgRegS');
+							loginCanvas.setProgressbar(ResourceUtil.getInstance().getString('loginCanvas.RegOK'));
+						}
+
+						else
+						{
+							if (message == 'no such user')
+							{
+								loginCanvas.alertMsgTxt.text = ResourceUtil.getInstance().getString('loginCanvas.alertMsgRegF') + ResourceUtil.getInstance().getString('loginCanvas.LogErrCode1');
+							}
+							else if (message == 'password is empty')
+							{
+								loginCanvas.alertMsgTxt.text = ResourceUtil.getInstance().getString('loginCanvas.alertMsgRegF') + ResourceUtil.getInstance().getString('loginCanvas.LogErrCode2');
+							}
+							else if (message == 'password is wrong')
+							{
+								loginCanvas.alertMsgTxt.text = ResourceUtil.getInstance().getString('loginCanvas.alertMsgRegF') + ResourceUtil.getInstance().getString('loginCanvas.LogErrCode3');
+							}
+							else
+							{ //message == 'failure
+								loginCanvas.alertMsgTxt.text = ResourceUtil.getInstance().getString('loginCanvas.alertMsgRegF') + ResourceUtil.getInstance().getString('loginCanvas.ErrCode');
+							}
+
+							loginCanvas.setProgressbar(ResourceUtil.getInstance().getString('loginCanvas.RegFail'), false);
+							rtmp = null;
+						}
+
+						break;
+
+					case RtmpMessageEvent.SIP_REGISTER:
+						if (message == 'SUCCESS')
+						{
+							loginCanvas.alertMsgTxt.text = ResourceUtil.getInstance().getString('loginCanvas.alertMsgRegS');
+							loginCanvas.setProgressbar(ResourceUtil.getInstance().getString('loginCanvas.RegOK'));
+						}
+
+						else
+						{
+							if (-1 != message.lastIndexOf("sipid had been used"))
+							{
+								loginCanvas.alertMsgTxt.text = ResourceUtil.getInstance().getString('loginCanvas.alertMsgRegF') + ResourceUtil.getInstance().getString('loginCanvas.RegErrCode1');
+							}
+							else
+							{ //message == 'failure
+								loginCanvas.alertMsgTxt.text = ResourceUtil.getInstance().getString('loginCanvas.alertMsgRegF') + ResourceUtil.getInstance().getString('loginCanvas.ErrCode');
+							}
+
+							loginCanvas.setProgressbar(ResourceUtil.getInstance().getString('loginCanvas.RegFail'), false);
+							rtmp = null;
+						}
+
+						break;
+
+					case RtmpMessageEvent.RECORDSTATE:
+						if (message == 'on')
+						{
+							phoneCanvas.recordBoxStatus(true);
+						}
+						else
+							phoneCanvas.recordBoxStatus(false);
+
+						break;
+
+					case RtmpMessageEvent.CALLSTATE:
+						break;
+
+					default:
+				}
+			}
+
+
+			private function incomingCallEvent(event:IncomingCallEvent):void
+			{
+				trace("incomingCallEvent " + event.uuid + " " + event.number + " " + event.name);
+				phoneCanvas.incomingCall(event);
+			}
+
+			private function callConnectedEvent(event:CallConnectedEvent):void
+			{
+				trace("CallConnectedEvent " + event.publishName + " " + event.playName);
+				phoneCanvas.statusTxt.text = ResourceUtil.getInstance().getString('phoneCanvas.sTxtEstablished');
+				phoneCanvas.callConnected(rtmp.netConnection, event.playName, event.publishName);
+
+				if (phoneCanvas.isConferenceCall())
+					socketManager.sendConferenceListCmd(phoneCanvas.curCall);
+			}
+
+			private function callDisconnectedEvent(event:CallDisconnectedEvent):void
+			{
+				trace("CallDisconnectedEvent " + event.message);
+				phoneCanvas.callDisconnected(event);
+			}
+
+			private function missedCallEvent(event:MissedCallEvent):void
+			{
+				trace("CallDisconnectedEvent " + event.message);
+				phoneCanvas.missedCall();
+			}
+
+			private function keyHandler(event:KeyboardEvent):void
+			{
+
+				switch (event.charCode)
+				{
+					case 8:
+						phoneCanvas.removeChr();
+						break;
+					case 48:
+						phoneCanvas.dtmfZero.play();
+						phoneCanvas.addChr("0");
+						break;
+					case 49:
+						phoneCanvas.dtmfOne.play();
+						phoneCanvas.addChr("1");
+						break;
+					case 50:
+						phoneCanvas.dtmfTwo.play();
+						phoneCanvas.addChr("2");
+						break;
+					case 51:
+						phoneCanvas.dtmfThree.play();
+						phoneCanvas.addChr("3");
+						break;
+					case 52:
+						phoneCanvas.dtmfFour.play();
+						phoneCanvas.addChr("4");
+						break;
+					case 53:
+						phoneCanvas.dtmfFive.play();
+						phoneCanvas.addChr("5");
+						break;
+					case 54:
+						phoneCanvas.dtmfSix.play();
+						phoneCanvas.addChr("6");
+						break;
+					case 55:
+						phoneCanvas.dtmfSeven.play();
+						phoneCanvas.addChr("7");
+						break;
+					case 56:
+						phoneCanvas.dtmfEight.play();
+						phoneCanvas.addChr("8");
+						break;
+					case 57:
+						phoneCanvas.dtmfNine.play();
+						phoneCanvas.addChr("9");
+						break;
+
+					case 127:
+
+						break;
+					case 35:
+						//phoneCanvas.addChr("#");
+						break;
+					case 42:
+						//phoneCanvas.addChr("*");
+						break;
+					default:
+				}
+			}
+
+			public function toggleLogs():void
+			{
+				if (phoneCanvas.logsButton.label == ResourceUtil.getInstance().getString('phoneCanvas.logsfold'))
+				{
+					this.width -= phoneCanvas.logTn.width + 5;
+					phoneCanvas.logsButton.label = ResourceUtil.getInstance().getString('phoneCanvas.logsunfold');
+				}
+				else
+				{
+					this.width += phoneCanvas.logTn.width + 5;
+					phoneCanvas.logsButton.label = ResourceUtil.getInstance().getString('phoneCanvas.logsfold');
+				}
+				ExternalInterface.call("resizeSwf", this.width, this.height);
+			}
+
+
+			public function toggleConferenceList(height:int):void
+			{
+				this.height += height;
+				ExternalInterface.call("resizeSwf", this.width, this.height);
+
+			}
+
+			public function parserConferencelist(data:String):Object
+			{
+
+				var objconfinfo:Object = new Object();
+				var objmemstat:Object;
+				objconfinfo.header = null;
+				objconfinfo.items = new Array();
+
+
+				if (data != null)
+				{
+					// get conference member list
+					var curindex:int = -1;
+					var lastindex:int = 0;
+					var counter:int = 0;
+
+					if (data.lastIndexOf("not found") == -1)
+					{
+						var items:Array = data.split("\n");
+						while (counter < items.length)
+						{
+							var strline:String = items[counter];
+							var memberdetail:Array = strline.split(";");
+							var status:uint = 0;
+							objmemstat = new Object();
+
+							status = parserStatus(memberdetail[5]); // set conference member status
+							objmemstat.id = memberdetail[0];
+							objmemstat.number = memberdetail[4];
+							objmemstat.status = status;
+
+							objconfinfo.items.push(objmemstat); // add member id
+							counter++;
+						}
+					}
+
+					objconfinfo.header = phoneCanvas.curCall;
+				}
+				return objconfinfo;
+
+			}
+
+			public function parserStatus(strstatus:String):uint
+			{
+				var value:uint = 0;
+				if (strstatus == null)
+					return value;
+				var statusdetail:Array = strstatus.split("|");
+
+				for (var i:int = 0; i < statusdetail.length; i++)
+				{
+					switch (statusdetail[i].toLowerCase())
+					{
+						case "floor":
+							value |= 1 << 0;
+							break;
+						case "video":
+							value |= 1 << 1;
+							break;
+						case "hear":
+							value |= 1 << 2;
+							break;
+						case "speak":
+							value |= 1 << 3;
+							break;
+						case "talking":
+							value |= 1 << 4;
+							break;
+
+						default:
+							break;
+					}
+				}
+
+				return value;
+			}
+
+			private function flipToPhoneCanvas():void
+			{
+				phoneCanvas.horizontalScrollPolicy = "off";
+
+				this.addEventListener(KeyboardEvent.KEY_DOWN, keyHandler);
+				phoneCanvas.registerTxt.text = this.username;
+				phoneCanvas.setFocus();
+				this.height = 335;
+				ExternalInterface.call("resizeSwf", this.width, this.height);
+
+				var e:Flip = new Flip(loginCanvas);
+				e.siblings = [ phoneCanvas ];
+				e.direction = DistortionConstants.RIGHT;
+				e.duration = 1500;
+				e.play();
+			}
+
+			private function flipToLoginCanvas():void
+			{
+				var e:Flip = new Flip(phoneCanvas);
+				e.siblings = [ loginCanvas ];
+				e.direction = DistortionConstants.LEFT;
+				e.duration = 2000;
+				e.play();
+			}
+		]]>
+	</mx:Script>
+	<local:LoginCanvas id="loginCanvas"
+					   x="0"
+					   y="0"
+					   width="100%"
+					   height="100%"
+					   change="flipToPhoneCanvas();"
+					   borderStyle="none"/>
+	<local:PhoneCanvas id="phoneCanvas"
+					   x="0"
+					   y="0"
+					   width="100%"
+					   height="100%"
+					   visible="false"/>
+</mx:Application>
