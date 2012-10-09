@@ -10,10 +10,13 @@ fsPhoneLite support basic call functionality. In addition, it implemented an sim
 
 ##NOTICE in compile:<br>
 * additional compiler arguments in Flex Compiler:<br>
--locale zh_CN en_US -swf-version=12 -theme=${flexlib}/themes/Halo/halo.swc<br>
+<pre>
+    -locale zh_CN en_US -swf-version=12 -theme=${flexlib}/themes/Halo/halo.swc<br>
+</pre>
 * add Folder in Flex Build Path:<br>
-resources/locale/{locale}<br>
-
+<pre>
+    resources/locale/{locale}<br>
+</pre>
 ##Others:<br>
 * fsPhoneLite.html is an example to load fsPhoneLite in html page<br>
 * Since the security policy of flash, exception will be threw out when connecting to mod_event_socket of freeSWITCH directly. Running the ruby script "crossdomain.rb" (thanks to Seven Du) on the freeSWITCH server will be an solution.<br>
