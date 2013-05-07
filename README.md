@@ -1,7 +1,7 @@
 fsPhoneLite
 ===========
 
-fsPhone is an flex softPhone designed for freeSWITCH, working with mod_rtmp by rtmp connection.
+fsPhone is a flex softPhone designed for freeSWITCH, working with mod_rtmp by rtmp connection.
 fsPhoneLite support basic call functionality. In addition, it implemented an simple esl to interact with freeSWITCH's mod_event_sokect.
 
 Licensing
